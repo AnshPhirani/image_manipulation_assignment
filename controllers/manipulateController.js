@@ -31,6 +31,16 @@ function applyGrayscale(image) {
 // Applying custom filter
 function applyCustomFilter(image, filter) {
   const [brightness, saturation, hue] = filter.split(",").map(parseFloat);
+
+  if (
+    brightness == undefined ||
+    saturation == undefined ||
+    hue == undefined ||
+    brightness < 0 ||
+    saturation < 0
+  )
+    return;
+
   return image.modulate({ brightness, saturation, hue: Math.floor(hue) });
 }
 
@@ -57,17 +67,11 @@ function convertFormat(image, format) {
 const manipulateImage = async (req, res) => {
   const { url, width, height, crop, bw, format, filter, rotation, watermark } =
     req.query;
-  console.log(
-    url,
-    width,
-    height,
-    crop,
-    bw,
-    format,
-    filter,
-    rotation,
-    watermark
-  );
+
+  if (!url) {
+    res.status(400).send("Please provide a valid url");
+    return;
+  }
 
   let inputImageBuffer;
   try {
@@ -108,6 +112,19 @@ const manipulateImage = async (req, res) => {
         const watermarkBuffer = await axios(watermark, {
           responseType: "arraybuffer",
         });
+        const watermarkImage = sharp(watermarkBuffer.data);
+        const watermarkMetadata = await watermarkImage.metadata();
+        const imageMetadata = await image.metadata();
+
+        if (
+          watermarkMetadata.width > imageMetadata.width ||
+          watermarkMetadata.height > imageMetadata.height
+        ) {
+          res
+            .status(400)
+            .send("Watermark image is larger than the original image");
+          return;
+        }
         image = addWatermark(image, watermarkBuffer);
       } catch (error) {
         res
